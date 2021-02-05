@@ -1,0 +1,184 @@
+version: '3.7'
+
+services:
+  server:
+    image: zabbix/zabbix-server-pgsql:alpine-5.2.2
+    container_name: zabbix-server
+    depends_on:
+      - pgsql
+    environment:
+      TZ: America/Fortaleza
+      DB_SERVER_HOST: "pgsql"
+      POSTGRES_DB: "zabbix"
+      POSTGRES_USER: "zabbix"
+      POSTGRES_PASSWORD: "asdfasdf"
+      ZBX_DEBUGLEVEL: 2
+      ZBX_CACHESIZE: "1G"
+      ZBX_STARTPINGERS: 500
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          memory: 256M    
+    ports:
+      - "10051:10051" 
+      - "161:161"
+      - "162:162"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./zabbix/alertscripts:/usr/lib/zabbix/alertscripts
+    links:
+      - pgsql:zabbix-pgsql
+    user: root
+    networks:
+      default:
+        aliases:
+          - server
+    restart: always
+
+  agent:
+    image: zabbix/zabbix-agent:alpine-5.2.2
+    container_name: zabbix-agent
+    privileged: true
+    depends_on:
+      - server
+    links:
+      - server:zabbix-server
+    environment:
+      ZBX_HOSTNAME: "server"
+      ZBX_SERVER_HOST: "server"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          memory: 256M         
+    ports:
+      - "10050:10050" 
+    networks:
+      default:
+        aliases:
+          - server
+    restart: always
+
+  web:
+    image: zabbix/zabbix-web-nginx-pgsql:alpine-5.2.2
+    container_name: zabbix-web
+    depends_on:
+      - pgsql
+      - server
+    environment:
+      PHP_TZ: America/Fortaleza
+      DB_SERVER_HOST: "pgsql"
+      ZBX_SERVER_HOST: "server"
+      POSTGRES_DB: "zabbix"
+      POSTGRES_USER: "zabbix"
+      POSTGRES_PASSWORD: "asdfasdf"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          memory: 256M          
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+
+    links:
+      - pgsql:zabbix-pgsql
+      - server:zabbix-server
+    ports:
+      - "3570:3570"
+      - "3580:3580"
+    user: root
+    networks:
+      default:
+        aliases:
+          - server
+    restart: always
+
+  pgsql:
+    image: postgres:13-alpine
+    container_name: zabbix-pgsql
+    environment:
+      TZ: America/Fortaleza
+      POSTGRES_DB: "zabbix"
+      POSTGRES_USER: "zabbix"
+      POSTGRES_PASSWORD: "asdfasdf"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          memory: 256M          
+    networks:
+      default:
+        aliases:
+          - mysql
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./pgsql:/var/lib/postgresql/data
+      - /etc/localtime:/etc/localtime:ro
+    restart: always
+
+  grafana:
+    image: grafana/grafana:7.3.4
+    container_name: grafana
+    user: "root"
+    environment:
+      TZ: America/Fortaleza
+      GF_INSTALL_PLUGINS: alexanderzobnin-zabbix-app
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: alexanderzobnin-zabbix-datasource
+      #GF_INSTALL_PLUGINS: alexanderzobnin-zabbix-app 3.12.4
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          memory: 256M          
+    ports:
+      - 8080:3000
+    networks:
+      default:
+        aliases:
+          - grafana
+    volumes:
+      - ./grafana:/var/lib/grafana
+    restart: always
+
+  # gateway:
+  #  deploy:
+  #      resources:
+  #         limits:
+  #            memory: 2048M
+  #            cpus: "1"
+  #         reservations:
+  #            memory: 1024M 
+  #  container_name: gateway-haproxy
+  #  image: haproxy:1.6
+  #  restart: always
+  # #  volumes:
+  # #    - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg
+  # #    - ./haproxy/testmap.map:/usr/local/etc/haproxy/testmap.map
+  # #    - ./certs:/etc/ssl/certs
+  # #    - ./private:/etc/ssl/private
+  # #    - ./haproxy/certs/dhparams.pem:/etc/haproxy/certs/dhparams.pem
+  # #    - ./var/run/haproxy:/var/run/haproxy
+  #  ports:
+  #   - 80:80
+  #   - 443:443
+  #   - 81:81
+  #   - 2222:2222
+  #   - 1521:1521
+  #   - 21:21
+  #   - 9092:9092
+  #   - 9091:9091
+  #   - 2181:2181
+  #   - 2888:2888
+  #   - 3888:3888
